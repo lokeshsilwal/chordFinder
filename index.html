@@ -240,7 +240,7 @@
     dim:{iv:[0,3,6],w:[1,1,1],suf:'dim',pen:.07},
   };
   const MODES = { simple:['maj','min'], detailed:['maj','min','7','maj7','m7','sus4','sus2','dim'] };
-  const PENALTIES = [1.6,1.15,.85,.62,.46,.35,.26,.19,.13,.08];
+  const PENALTIES = [.9,.65,.48,.35,.26,.2,.15,.11,.075,.045];
   const SR = 22050, N = 16384, HOP = 4096;
 
   let A = null;            // analysis: {T, chroma, bass, energyLow, duration, keyRoot, keyMinor}
@@ -419,7 +419,7 @@
 
   async function analyze(file){
     const decoded = await decode(file);
-    setProgress(0.15, 'Preparing audio…');
+    setProgress(0.12, 'Preparing audio…');
     const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     const len = Math.max(N, Math.ceil(decoded.duration*SR));
     const off = new OAC(1, len, SR);
@@ -428,23 +428,34 @@
     const x = rendered.getChannelData(0);
     const duration = decoded.duration;
 
+    // --- 1. Long-window spectra -> whitened spectral peaks ---
     const T = Math.max(1, Math.floor((x.length - N)/HOP) + 1);
     const win = new Float32Array(N); for (let i=0;i<N;i++) win[i] = 0.5 - 0.5*Math.cos(2*Math.PI*i/(N-1));
     const fft = makeFFT(N);
     const re = new Float64Array(N), im = new Float64Array(N);
     const kMin = Math.floor(38*N/SR), kMax = Math.ceil(2200*N/SR);
-    const peaks = new Array(T);     // per frame: [midi, mag, midi, mag, ...]
+    const L = kMax + 3;                       // bins 0..kMax+2
+    const peaks = new Array(T);               // per frame: [midi, mag, midi, mag, ...]
     const rms = new Float32Array(T);
-    const mag = new Float64Array(kMax+2);
+    const lm = new Float64Array(L), mag = new Float64Array(L);
+    const WR = 20;                            // whitening window: 41 bins
+    const refl = i => i < 0 ? -i-1 : (i >= L ? 2*L-i-1 : i);
 
-    setProgress(0.2, 'Listening for chords…');
+    setProgress(0.15, 'Listening for chords…');
     for (let t=0;t<T;t++){
       const o = t*HOP; let e=0;
       for (let i=0;i<N;i++){ const v = x[o+i]||0; e += v*v; re[i]=v*win[i]; im[i]=0; }
       rms[t] = Math.sqrt(e/N);
       fft(re, im);
-      let mx = 0;
-      for (let k=kMin-1;k<=kMax+1;k++){ const m=Math.hypot(re[k],im[k]); mag[k]=m; if (m>mx) mx=m; }
+      for (let k=0;k<L;k++) lm[k] = Math.log(Math.hypot(re[k],im[k]) + 1e-9);
+      // spectral whitening: subtract moving average of the log spectrum (removes broadband drums/noise and timbre tilt)
+      let acc = 0; for (let j=-WR;j<=WR;j++) acc += lm[refl(j)];
+      for (let k=0;k<L;k++){
+        const d = lm[k] - acc/(2*WR+1);
+        mag[k] = Math.exp(d > 0 ? d : 0) - 1;
+        acc += lm[refl(k+WR+1)] - lm[refl(k-WR)];
+      }
+      let mx = 0; for (let k=kMin-1;k<=kMax+1;k++) if (mag[k]>mx) mx=mag[k];
       const thr = mx*0.012, pk = [];
       for (let k=kMin;k<=kMax;k++){
         const b=mag[k];
@@ -456,16 +467,14 @@
         }
       }
       peaks[t]=pk;
-      if (t%25===0){ setProgress(0.2 + 0.7*t/T, 'Listening for chords… '+Math.round(100*t/T)+'%'); await tick(); }
+      if (t%25===0){ setProgress(0.15 + 0.65*t/T, 'Listening for chords… '+Math.round(100*t/T)+'%'); await tick(); }
     }
 
-    // Tuning: circular mean of deviation from equal temperament (peaks above ~150 Hz)
+    // --- 2. Tuning + chroma (treble and bass) ---
     let sc=0, ss=0;
     for (const pk of peaks) for (let i=0;i<pk.length;i+=2){ if (pk[i]<50) continue; const w=Math.sqrt(pk[i+1]), ang=2*Math.PI*pk[i]; sc+=w*Math.cos(ang); ss+=w*Math.sin(ang); }
-    const tuning = Math.atan2(ss, sc)/(2*Math.PI); // semitones, -0.5..0.5
-
-    // Chroma (treble + bass)
-    const chroma = new Float32Array(T*12), bass = new Float32Array(T*12);
+    const tuning = Math.atan2(ss, sc)/(2*Math.PI);
+    const chroma = new Float64Array(T*12), bass = new Float64Array(T*12);
     for (let t=0;t<T;t++){
       const pk = peaks[t];
       for (let i=0;i<pk.length;i+=2){
@@ -476,29 +485,58 @@
         if (f>=38 && f<=260) bass[t*12+pc] += w;
       }
     }
-    // Smooth over time (±2 frames ≈ ±0.37 s)
-    const smooth = (arr) => {
-      const out = new Float32Array(arr.length), R=2;
-      for (let t=0;t<T;t++) for (let p=0;p<12;p++){
-        let s=0,n=0; for (let u=Math.max(0,t-R); u<=Math.min(T-1,t+R); u++){ s+=arr[u*12+p]; n++; }
-        out[t*12+p]=s/n;
+
+    // --- 3. Beat tracking ---
+    setProgress(0.84, 'Finding the beat…'); await tick();
+    const bt = trackBeats(x);
+    const tc = new Float64Array(T); for (let t=0;t<T;t++) tc[t] = (t*HOP + N/2)/SR;
+
+    // --- 4. Pool chroma into analysis units (beats; frames if no beat found) ---
+    let U, C, B, R, starts, ends, wdur, beatMode = bt.length >= 4;
+    if (beatMode){
+      const edges = [0]; for (const b of bt){ const v = Math.min(Math.max(b,0),duration); if (v > edges[edges.length-1]) edges.push(v); }
+      if (duration > edges[edges.length-1]) edges.push(duration);
+      U = edges.length-1;
+      C = new Float64Array(U*12); B = new Float64Array(U*12); R = new Float64Array(U);
+      const cnt = new Int32Array(U);
+      let u = 0;
+      for (let t=0;t<T;t++){
+        while (u < U-1 && tc[t] >= edges[u+1]) u++;
+        if (tc[t] < edges[u] || tc[t] >= edges[u+1]) continue;
+        cnt[u]++; R[u] += rms[t];
+        for (let p=0;p<12;p++){ C[u*12+p] += chroma[t*12+p]; B[u*12+p] += bass[t*12+p]; }
       }
-      return out;
-    };
-    const cS = smooth(chroma), bS = smooth(bass);
-    // normalize
-    const total = new Float64Array(12);
-    for (let t=0;t<T;t++){
-      let n2=0; for (let p=0;p<12;p++) n2+=cS[t*12+p]**2; n2=Math.sqrt(n2)||1;
-      for (let p=0;p<12;p++){ cS[t*12+p]/=n2; total[p]+=cS[t*12+p]; }
-      let bm=0; for (let p=0;p<12;p++) bm=Math.max(bm,bS[t*12+p]); bm=bm||1;
-      for (let p=0;p<12;p++) bS[t*12+p]/=bm;
+      for (let v=0; v<U; v++){
+        if (cnt[v]){ R[v] /= cnt[v]; for (let p=0;p<12;p++){ C[v*12+p] /= cnt[v]; B[v*12+p] /= cnt[v]; } }
+        else {   // no frame centre inside this beat: copy nearest frame
+          const mid = (edges[v]+edges[v+1])/2; let bi=0, bd=Infinity;
+          for (let t=0;t<T;t++){ const dd=Math.abs(tc[t]-mid); if (dd<bd){bd=dd;bi=t;} }
+          R[v] = rms[bi]; for (let p=0;p<12;p++){ C[v*12+p]=chroma[bi*12+p]; B[v*12+p]=bass[bi*12+p]; }
+        }
+      }
+      starts = edges.slice(0,-1); ends = edges.slice(1);
+      wdur = starts.map((s,i) => Math.max((ends[i]-s)/(HOP/SR), 0.5));
+    } else {
+      U = T; C = new Float64Array(T*12); B = new Float64Array(T*12); R = Float64Array.from(rms);
+      for (let t=0;t<T;t++) for (let p=0;p<12;p++){
+        let s1=0,s2=0,n=0; for (let v=Math.max(0,t-2); v<=Math.min(T-1,t+2); v++){ s1+=chroma[v*12+p]; s2+=bass[v*12+p]; n++; }
+        C[t*12+p]=s1/n; B[t*12+p]=s2/n;
+      }
+      starts = Array.from(tc); starts[0] = 0; ends = Array.from(tc).slice(1).concat([duration]);
+      wdur = new Array(T).fill(1);
     }
-    // Silence detection
-    const sorted = Array.from(rms).sort((a,b)=>a-b);
+    // normalize; key profile
+    const total = new Float64Array(12);
+    for (let v=0; v<U; v++){
+      let n2=0; for (let p=0;p<12;p++) n2+=C[v*12+p]**2; n2=Math.max(Math.sqrt(n2),1e-9);
+      for (let p=0;p<12;p++){ C[v*12+p]/=n2; total[p]+=C[v*12+p]; }
+      let bm=0; for (let p=0;p<12;p++) bm=Math.max(bm,B[v*12+p]); bm=Math.max(bm,1e-9);
+      for (let p=0;p<12;p++) B[v*12+p]/=bm;
+    }
+    const sorted = Array.from(R).sort((a,b)=>a-b);
     const ref = sorted[Math.floor(sorted.length*0.75)] || 0;
-    const energyLow = new Uint8Array(T);
-    for (let t=0;t<T;t++) energyLow[t] = (rms[t] < ref*0.08 || rms[t] < 2e-4) ? 1 : 0;
+    const low = new Uint8Array(U);
+    for (let v=0; v<U; v++) low[v] = (R[v] < ref*0.08 || R[v] < 2e-4) ? 1 : 0;
 
     // Key (Krumhansl–Kessler)
     const KMAJ=[6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
@@ -513,16 +551,71 @@
     for (let r=0;r<12;r++){ const a=corr(KMAJ,r), b=corr(KMIN,r); if (a>best){best=a;keyRoot=r;keyMinor=false;} if (b>best){best=b;keyRoot=r;keyMinor=true;} }
 
     setProgress(0.97, 'Finishing up…'); await tick();
-    A = { T, chroma:cS, bass:bS, energyLow, duration, keyRoot, keyMinor, tuning };
+    A = { U, chroma:C, bass:B, low, starts, ends, wdur, beatMode, duration, keyRoot, keyMinor, tuning };
+  }
+
+  // Beat tracker: spectral-flux onsets, autocorrelation tempo, dynamic-programming beats (Ellis 2007)
+  function trackBeats(x){
+    const n = 2048, h = 512, fps = SR/h;
+    const T2 = Math.max(1, Math.floor((x.length - n)/h) + 1);
+    const fft = makeFFT(n), re = new Float64Array(n), im = new Float64Array(n);
+    const win = new Float64Array(n); for (let i=0;i<n;i++) win[i] = 0.5 - 0.5*Math.cos(2*Math.PI*i/(n-1));
+    const nb = n/2+1;
+    let prevS = new Float64Array(nb), curS = new Float64Array(nb);
+    const flux = new Float64Array(T2);
+    for (let t=0;t<T2;t++){
+      const o = t*h;
+      for (let i=0;i<n;i++){ re[i] = (x[o+i]||0)*win[i]; im[i] = 0; }
+      fft(re, im);
+      let s = 0;
+      for (let k=0;k<nb;k++){ curS[k] = Math.log1p(100*Math.hypot(re[k],im[k])); if (t>0){ const d = curS[k]-prevS[k]; if (d>0) s += d; } }
+      flux[t] = s;
+      const tmp = prevS; prevS = curS; curS = tmp;
+    }
+    // subtract local mean (16 frames, scipy 'reflect' alignment), rectify, scale
+    const Lf = T2, refl = i => i < 0 ? -i-1 : (i >= Lf ? 2*Lf-i-1 : i);
+    const on = new Float64Array(Lf);
+    for (let i=0;i<Lf;i++){ let a=0; for (let j=i-8;j<=i+7;j++) a += flux[refl(j)]; on[i] = Math.max(flux[i]-a/16, 0); }
+    let mean=0; for (const v of on) mean+=v; mean/=Lf;
+    let sd=0; for (const v of on) sd+=(v-mean)**2; sd=Math.sqrt(sd/Lf)+1e-9;
+    for (let i=0;i<Lf;i++) on[i] /= sd;
+    // tempo: autocorrelation weighted toward 120 bpm, 60–180 bpm
+    let bestLag = 0, bestV = -Infinity;
+    for (let lag=1; lag<Lf; lag++){
+      const bpm = 60*fps/lag;
+      if (bpm > 180) continue; if (bpm < 60) break;
+      let ac = 0; for (let i=0;i+lag<Lf;i++) ac += on[i]*on[i+lag];
+      const w = Math.exp(-0.5*Math.pow(Math.log2(bpm/120)/0.9, 2));
+      if (ac*w > bestV){ bestV = ac*w; bestLag = lag; }
+    }
+    if (!bestLag) return [];
+    const period = bestLag;
+    const score = Float64Array.from(on), back = new Int32Array(Lf).fill(-1);
+    const lo2 = Math.floor(2*period), hi2 = Math.floor(period/2);
+    for (let i=0;i<Lf;i++){
+      const hi = i - hi2; if (hi <= 0) continue;
+      const lo = Math.max(i - lo2, 0);
+      let bv = -Infinity, bj = -1;
+      for (let j=lo;j<hi;j++){ const l = Math.log((i-j)/period); const c = score[j] - 100*l*l; if (c > bv){ bv=c; bj=j; } }
+      score[i] = on[i] + bv; back[i] = bj;
+    }
+    const tail = Math.min(Lf, Math.floor(period*2));
+    let bi = Lf-tail, bvv = -Infinity;
+    for (let i=Lf-tail;i<Lf;i++) if (score[i] > bvv){ bvv = score[i]; bi = i; }
+    const out = [];
+    for (let i=bi; i>=0; i=back[i]) out.push((i*h + n/2)/SR);
+    return out.reverse();
   }
 
   // ---------- Chord recognition ----------
+  const HARM = [[0,1],[0,.6],[7,.36],[0,.216],[4,.1296],[7,.07776]];   // overtones 1..6: interval mod 12, weight 0.6^(k-1)
   function buildChords(mode){
     const list = [];
     for (const q of MODES[mode]){
       const Q = QUALS[q];
       for (let r=0;r<12;r++){
-        const v = new Float32Array(12); Q.iv.forEach((iv,i) => v[(r+iv)%12] = Q.w[i]);
+        const v = new Float64Array(12);
+        Q.iv.forEach((iv,i) => { for (const [h, w] of HARM) v[(r+iv+h)%12] += Q.w[i]*w; });
         let n=0; for (const a of v) n+=a*a; n=Math.sqrt(n); for (let i=0;i<12;i++) v[i]/=n;
         list.push({root:r, q, tmpl:v, pen:Q.pen});
       }
@@ -533,20 +626,20 @@
 
   function recompute(){
     if (!A) return;
-    const chords = buildChords(state.mode), K = chords.length, T = A.T;
-    const E = new Float32Array(T*K);
+    const chords = buildChords(state.mode), K = chords.length, T = A.U;
+    const E = new Float64Array(T*K);
     for (let t=0;t<T;t++){
-      const c = A.chroma.subarray(t*12, t*12+12), b = A.bass.subarray(t*12, t*12+12);
+      const c = A.chroma.subarray(t*12, t*12+12), b = A.bass.subarray(t*12, t*12+12), w = A.wdur[t];
       for (let j=0;j<K;j++){
         const ch = chords[j];
-        if (ch.root<0){ E[t*K+j] = A.energyLow[t] ? 3 : 0.3; continue; }
+        if (ch.root<0){ E[t*K+j] = (A.low[t] ? 3 : 0.3)*w; continue; }
         let s=0; for (let p=0;p<12;p++) s += c[p]*ch.tmpl[p];
-        s += 0.12*b[ch.root] - ch.pen;
-        E[t*K+j] = A.energyLow[t] ? s-2 : s;
+        s += 0.25*b[ch.root] - ch.pen;
+        E[t*K+j] = (A.low[t] ? s-2 : s)*w;
       }
     }
     // Viterbi with a constant switching penalty
-    const P = PENALTIES[state.chg];
+    const P = PENALTIES[state.chg] * (A.beatMode ? 1.5 : 1);
     let prev = new Float64Array(K), cur = new Float64Array(K);
     const back = new Int16Array(T*K);
     for (let k=0;k<K;k++) prev[k]=E[k];
@@ -563,15 +656,14 @@
     let bv=-Infinity; for (let k=0;k<K;k++) if (prev[k]>bv){bv=prev[k];path[T-1]=k;}
     for (let t=T-1;t>0;t--) path[t-1]=back[t*K+path[t]];
 
-    // frames → segments
-    const fT = t => Math.max(0, (t*HOP + N/2)/SR);
+    // units → segments
     const out = [];
     for (let t=0;t<T;t++){
       const ch = chords[path[t]];
       const id = ch.root<0 ? 'N' : ch.root+':'+ch.q;
-      if (out.length && out[out.length-1].id===id) continue;
-      if (out.length) out[out.length-1].end = fT(t);
-      out.push({id, root:ch.root, q:ch.q, start: out.length? fT(t) : 0, end: A.duration});
+      if (out.length && out[out.length-1].id===id){ out[out.length-1].end = A.ends[t]; continue; }
+      if (out.length) out[out.length-1].end = A.starts[t];
+      out.push({id, root:ch.root, q:ch.q, start: out.length ? A.starts[t] : 0, end: A.ends[t]});
     }
     if (out.length) out[out.length-1].end = A.duration;
     // remove very short blips
