@@ -1,5 +1,5 @@
 // Offline support: cache the app shell, serve it when there's no connection.
-const CACHE = 'chord-finder-v3';
+const CACHE = 'chord-finder-v4';
 const FILES = ['./', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

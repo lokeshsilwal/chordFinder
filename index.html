@@ -667,6 +667,11 @@ if (typeof module !== 'undefined') module.exports = Lyr;
     $('numStyle').querySelectorAll('button').forEach(x => x.classList.toggle('on', x===b));
     renderAll();
   });
+  $('keyPrior').querySelectorAll('button').forEach(b => b.onclick = () => {
+    state.keyPrior = b.dataset.v === '1';
+    $('keyPrior').querySelectorAll('button').forEach(x => x.classList.toggle('on', x===b));
+    recompute();
+  });
   $('chg').oninput =() => { state.chg = +$('chg').value; recompute(); };
   $('copy').onclick = copyChords;
 
