@@ -1,0 +1,10 @@
+{"whiten+harm":{"whiten":true,"templates":"harmonic"},
+ "whiten+bass.25":{"whiten":true,"bass_w":0.25},
+ "whiten+harm+bass.25":{"whiten":true,"templates":"harmonic","bass_w":0.25},
+ "hpss":{"hpss":true},
+ "hpss+whiten+harm+bass.25":{"hpss":true,"whiten":true,"templates":"harmonic","bass_w":0.25},
+ "nnls":{"nnls":true},
+ "nnls+whiten+bass.25":{"nnls":true,"whiten":true,"bass_w":0.25},
+ "beat":{"beat":true},
+ "beat+whiten+harm+bass.25":{"beat":true,"whiten":true,"templates":"harmonic","bass_w":0.25}
+}

@@ -1,0 +1,9 @@
+{"B = beat+whiten+harm+bass.25":{"beat":true,"whiten":true,"templates":"harmonic","bass_w":0.25},
+ "B + median pool":{"beat":true,"whiten":true,"templates":"harmonic","bass_w":0.25,"smooth":"median"},
+ "B bass .4":{"beat":true,"whiten":true,"templates":"harmonic","bass_w":0.4},
+ "B harm_s .45":{"beat":true,"whiten":true,"templates":"harmonic","bass_w":0.25,"harm_s":0.45},
+ "B harm_s .75":{"beat":true,"whiten":true,"templates":"harmonic","bass_w":0.25,"harm_s":0.75},
+ "B + key bias .03":{"beat":true,"whiten":true,"templates":"harmonic","bass_w":0.25,"key_bias":0.03},
+ "B + key bias .08":{"beat":true,"whiten":true,"templates":"harmonic","bass_w":0.25,"key_bias":0.08},
+ "B + hpss":{"beat":true,"whiten":true,"templates":"harmonic","bass_w":0.25,"hpss":true}
+}

@@ -1,0 +1,10 @@
+{"baseline":{},
+ "median smoothing":{"smooth":"median"},
+ "wider smoothing r=4":{"smooth_r":4},
+ "harmonic templates":{"templates":"harmonic"},
+ "KL cost":{"cost":"kl"},
+ "euclid cost":{"cost":"gauss"},
+ "key bias 0.05":{"key_bias":0.05},
+ "bass weight 0.25":{"bass_w":0.25},
+ "whitening":{"whiten":true}
+}
