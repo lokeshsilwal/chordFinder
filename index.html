@@ -20,6 +20,7 @@
     --text:#eef0f4; --muted:#9aa3b2; --accent:#ffb547; --accent2:#ff7a59; --good:#5ad1a0;
   }
   *{box-sizing:border-box}
+  [hidden]{display:none !important}
   html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:15px;line-height:1.5}
   main{max-width:980px;margin:0 auto;padding:calc(32px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left))}
   html,body{-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
@@ -133,6 +134,32 @@
   .cell.on .d,.cell.on .nt{color:#3d2a08}
   .chip em{font-style:normal;color:var(--accent);margin-left:5px}
   @media (max-width:600px){ .scale{gap:5px} .sn{width:calc((100% - 30px)/7);min-width:0} .sn b{font-size:17px} .outlbl{width:100%;margin:4px 0 0} .now{gap:16px} }
+  .lyr-head{margin-top:26px;flex-wrap:wrap;gap:10px}
+  .lyr-head .btn-row{justify-content:flex-start}
+  .lyr-input textarea{width:100%;min-height:180px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:12px;font:inherit;font-size:15px;margin-top:12px;resize:vertical}
+  .btn-row.left{justify-content:flex-start;margin-top:10px}
+  .note.tight{margin-top:8px}
+  .lyr{background:var(--panel);border-radius:18px;padding:14px 18px;margin-top:10px}
+  .lh{color:var(--muted);font-weight:700;margin:14px 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+  .lb{height:10px}
+  .lc{margin:6px 0 10px 54px;font-family:"Space Grotesk";color:var(--accent);font-size:16px}
+  .lc .lbl{color:var(--muted);font-family:Inter,sans-serif;font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-right:10px;font-weight:700}
+  .ll{display:flex;gap:10px;align-items:flex-end;padding:4px 8px;margin:0 -8px;border-radius:10px;cursor:pointer}
+  .ll:hover{background:var(--panel2)}
+  .ll.on{background:#2a2414}
+  .ll.pinned .lt{color:var(--accent)}
+  .lt{flex:none;width:44px;color:var(--muted);font-size:11px;padding-bottom:3px;font-variant-numeric:tabular-nums}
+  .lw{display:flex;flex-wrap:wrap;column-gap:.45em;row-gap:2px}
+  .w{display:inline-flex;flex-direction:column}
+  .w .c{font-family:"Space Grotesk";color:var(--accent);font-size:15px;line-height:1.2;white-space:pre;min-height:1.2em}
+  .w .t{font-size:17px;line-height:1.35}
+  .ll.on .w .t{color:#fff}
+  .unpin{background:none;border:0;color:var(--accent);font-size:11px;padding:0;cursor:pointer;display:block}
+  .tapbar{position:fixed;left:0;right:0;bottom:0;background:#1d222bf2;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:14px 18px calc(14px + env(safe-area-inset-bottom));z-index:10;display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  .tap-next span{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  .tap-next b{font-size:18px}
+  body.tapping main{padding-bottom:150px}
+  @media (max-width:600px){ .lt{width:34px} .lc{margin-left:44px} .w .t{font-size:16px} }
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--good);color:#06221a;padding:8px 16px;border-radius:10px;font-weight:600;opacity:0;transition:.2s;pointer-events:none}
   .toast.show{opacity:1}
   @media (max-width:600px){ .cur{font-size:64px} header h1{font-size:28px} .now{padding:18px} }
@@ -206,6 +233,8 @@
         <div class="seg" id="numStyle"><button data-s="num" class="on" type="button">1 4 5 6m</button><button data-s="roman" type="button">I IV V vi</button></div></div>
       <div class="ctl"><label>Chord types</label>
         <div class="seg" id="mode"><button data-mode="simple" class="on" type="button">Major / minor</button><button data-mode="detailed" type="button">+ 7ths, sus, dim</button></div></div>
+      <div class="ctl"><label>Prefer chords in the key</label>
+        <div class="seg" id="keyPrior"><button data-v="0" class="on" type="button">Off</button><button data-v="1" type="button">On</button></div></div>
       <div class="ctl grow"><label>How often chords change</label>
         <input type="range" id="chg" min="0" max="9" value="4">
         <div class="rangeends"><span>Fewer</span><span>More</span></div></div>
@@ -216,16 +245,299 @@
       <div class="used"><label>Chords in this song</label><div id="used"></div></div>
     </div>
 
+    <div class="sheet-head lyr-head"><h2>Lyrics &amp; chords</h2>
+      <div class="btn-row" id="lyrTools" hidden>
+        <button id="lyrTap" class="btn ghost" type="button">Tap along</button>
+        <button id="lyrAsr" class="btn ghost" type="button" hidden>Match words (English)</button>
+        <button id="lyrReset" class="btn ghost" type="button">Auto line-up</button>
+        <button id="lyrEdit" class="btn ghost" type="button">Edit lyrics</button>
+        <button id="lyrCopy" class="btn ghost" type="button">Copy chord sheet</button>
+      </div></div>
+    <div id="lyrInput" class="lyr-input">
+      <textarea id="lyrText" placeholder="Paste the song's lyrics here, one line per row. Blank lines and labels like [Chorus] are fine." spellcheck="false"></textarea>
+      <div class="btn-row left"><button id="lyrGo" class="btn primary" type="button">Line up lyrics with the song</button></div>
+    </div>
+    <div id="lyrView" hidden>
+      <p class="note tight">If a line is in the wrong place, play the song and tap that line the moment it's sung. The lines after it shift to fit. Or use <b>Tap along</b> to set every line yourself.</p>
+      <div id="lyrSheet" class="lyr"></div>
+    </div>
+    <p id="lyrStatus" class="note tight"></p>
+
     <div class="sheet-head"><h2>Chord sheet</h2><button id="copy" class="btn ghost" type="button">Copy chords</button></div>
     <div id="sheet" class="sheet"></div>
     <textarea id="copyFallback" hidden readonly></textarea>
     <p class="note">The detection gives you a good starting point. It isn't a perfect transcription, so trust your ear if a chord sounds wrong. If chords flicker back and forth, move the slider toward "Fewer". If quick changes get missed, move it toward "More". Click any chord to jump there.</p>
   </section>
 </main>
+<div id="tapBar" class="tapbar" hidden>
+  <div class="tap-next"><span>Next line</span><b id="tapNext"></b></div>
+  <div class="btn-row"><button id="tapBtn" class="btn primary big" type="button">Tap when it starts</button><button id="tapStop" class="btn ghost" type="button">Done</button></div>
+</div>
 <div class="toast" id="toast">Copied</div>
 
 <script>
+// ===== Lyrics alignment module (no dependencies; runs in browser and Node) =====
+const Lyr = (() => {
+
+  // ---------- Syllable counting ----------
+  const EN_WORDS = new Set('the you and i me my to a in it is of on your love all we be for so that this with but no not when what can just like oh baby know now go dont im youre its was are do will one up down out'.split(' '));
+  function sylDevanagari(w){
+    // count aksharas: independent vowels + consonants not followed by virama (halant)
+    let n = 0;
+    for (let i=0;i<w.length;i++){
+      const c = w.charCodeAt(i);
+      if (c >= 0x0905 && c <= 0x0914) n++;                       // independent vowels
+      else if ((c >= 0x0915 && c <= 0x0939) || (c >= 0x0958 && c <= 0x095F)){
+        if (w.charCodeAt(i+1) !== 0x094D && !(w.charCodeAt(i+1) === 0x093C && w.charCodeAt(i+2) === 0x094D)) n++;
+      }
+    }
+    return Math.max(1, n);
+  }
+  function sylLatin(w, english){
+    w = w.toLowerCase().replace(/[^a-z]/g, '');
+    if (!w) return 0;
+    const groups = w.match(/[aeiouy]+/g);
+    let n = groups ? groups.length : 1;
+    if (english && n > 1){
+      if (/[^aeiouy]e$/.test(w) && !/[^aeiouy]le$/.test(w)) n--;      // silent e (but "-le" is a syllable)
+      if (/[^aeiouy]es$|[^aeiouy]ed$/.test(w) && !/[td]ed$|[sxz]es$|[cs]hes$/.test(w)) n--;
+    }
+    return Math.max(1, n);
+  }
+  function lineSyllables(text){
+    const words = text.split(/\s+/).filter(Boolean);
+    const english = words.filter(w => EN_WORDS.has(w.toLowerCase().replace(/[^a-z]/g,''))).length >= Math.max(1, words.length*0.2);
+    return words.map(w => /[ऀ-ॿ]/.test(w) ? sylDevanagari(w) : sylLatin(w, english));
+  }
+
+  // ---------- Parse pasted lyrics ----------
+  // Returns items: {type:'line', text, syl:[per word], words:[...]} | {type:'header', text} | {type:'blank'}
+  function parse(text){
+    const out = [];
+    for (let raw of text.replace(/\r/g,'').split('\n')){
+      const t = raw.trim();
+      if (!t){ if (out.length && out[out.length-1].type !== 'blank') out.push({type:'blank'}); continue; }
+      if (/^\[.*\]$/.test(t) || /^(verse|chorus|bridge|intro|outro|pre-chorus|hook|refrain|antara|asthayi|sthayi)\b.*:?$/i.test(t) && t.split(/\s+/).length <= 3){
+        out.push({type:'header', text:t.replace(/^\[|\]$/g,'').replace(/:$/,'')}); continue;
+      }
+      // ignore chord-only lines someone pasted along with the lyrics
+      if (/^([A-G][#b]?(m|maj|min|dim|aug|sus|add)?\d*(\/[A-G][#b]?)?\s*)+$/.test(t)) continue;
+      const words = t.split(/\s+/);
+      const syl = lineSyllables(t);
+      out.push({type:'line', text:t, words, syl, nsyl: syl.reduce((a,b)=>a+b,0)});
+    }
+    while (out.length && out[out.length-1].type === 'blank') out.pop();
+    return out;
+  }
+
+  // ---------- Vocal phrase detection ----------
+  // Singing is usually the most prominent sound in the 300–3500 Hz band. We track that band's
+  // loudness and compare it with a local threshold (between the quiet and loud levels of the
+  // surrounding ±12 s), so it adapts to each part of the song. Then we clean up into phrases.
+  function detectPhrases(x, SR, makeFFT, opts={}){
+    const n = 2048, h = 256, fps = SR/h;
+    const T = Math.max(1, Math.floor((x.length - n)/h) + 1);
+    const fft = makeFFT(n), re = new Float64Array(n), im = new Float64Array(n);
+    const win = new Float64Array(n); for (let i=0;i<n;i++) win[i] = 0.5-0.5*Math.cos(2*Math.PI*i/(n-1));
+    const k0 = Math.ceil(300*n/SR), k1 = Math.floor(3500*n/SR);
+    const band = new Float64Array(T);
+    for (let t=0;t<T;t++){
+      const o = t*h;
+      for (let i=0;i<n;i++){ re[i] = (x[o+i]||0)*win[i]; im[i] = 0; }
+      fft(re, im);
+      let e = 0; for (let k=k0;k<=k1;k++) e += re[k]*re[k] + im[k]*im[k];
+      band[t] = Math.log(e + 1e-9);
+    }
+    // smooth ~0.12 s
+    const R = Math.max(1, Math.round(0.06*fps));
+    const fs = new Float64Array(T);
+    { let acc = 0, c = 0; const pre = new Float64Array(T+1); for (let t=0;t<T;t++) pre[t+1] = pre[t]+band[t];
+      for (let t=0;t<T;t++){ const a = Math.max(0,t-R), b = Math.min(T,t+R+1); fs[t] = (pre[b]-pre[a])/(b-a); } }
+    const pct = (arr, q) => { const s = Array.from(arr).sort((a,b)=>a-b); return s[Math.min(s.length-1, Math.floor(q*(s.length-1)))] ?? 0; };
+    const W = Math.round((opts.win ?? 12)*fps), step = Math.max(1, Math.round(fps/2));
+    const qLo = opts.qLo ?? 0.2, qHi = opts.qHi ?? 0.9, mid = opts.mid ?? 0.5;
+    const gmax = pct(fs, 0.95);
+    // song-wide floor, so loud instrumental passages (intros, solos) aren't taken for singing
+    const gLo = pct(fs, qLo), gHi = pct(fs, qHi), gFloor = gLo + (opts.gmid ?? 0.3)*(gHi-gLo);
+    const voiced = new Uint8Array(T), thrA = new Float64Array(T);
+    for (let c=0;c<T;c+=step){
+      const seg = fs.subarray(Math.max(0,c-W), Math.min(T,c+W));
+      const lo = pct(seg, qLo), hi = pct(seg, qHi);
+      const thr = Math.max(lo + mid*(hi-lo), gmax - 6, gFloor);       // never call near-silence "singing"
+      for (let t=c;t<Math.min(T,c+step);t++){ thrA[t] = thr; voiced[t] = fs[t] > thr ? 1 : 0; }
+    }
+    const minGap = Math.round((opts.minGap ?? 0.4)*fps), minRun = Math.round((opts.minRun ?? 0.3)*fps);
+    const runs = arr => { const r=[]; let s=-1; for (let t=0;t<=arr.length;t++){ const v = t<arr.length ? arr[t] : 0; if (v && s<0) s=t; if (!v && s>=0){ r.push([s,t]); s=-1; } } return r; };
+    let rr = runs(voiced);
+    for (let i=1;i<rr.length;i++) if (rr[i][0]-rr[i-1][1] < minGap){ for (let t=rr[i-1][1]; t<rr[i][0]; t++) voiced[t]=1; }
+    rr = runs(voiced).filter(([a,b]) => b-a >= minRun);
+    const offs = (n/2)/SR;
+    const phrases = rr.map(([a,b]) => ({ s: a/fps + offs, e: b/fps + offs }));
+    return { phrases, fps, voiced };
+  }
+
+  // ---------- Alignment of lines to phrases (dynamic programming) ----------
+  // lines: [{nsyl}], phrases: [{s,e}], returns per line {start,end}
+  // opts.anchorFirst: the first line must start at the first phrase (used between pinned lines)
+  function alignSegment(lines, phrases, P, anchorFirst){
+    const nL = lines.length, nP = phrases.length;
+    if (!nL) return [];
+    if (!nP) return null;
+    const totalSyl = lines.reduce((a,l)=>a+l.nsyl, 0);
+    let rate = P.rate || (totalSyl / Math.max(1e-3, phrases.reduce((a,p)=>a+(p.e-p.s),0)));
+    let result = null;
+    for (let pass=0; pass<2; pass++){
+      const INF = 1e18;
+      const D = Array.from({length:nL+1}, () => new Float64Array(nP+1).fill(INF));
+      const B = Array.from({length:nL+1}, () => new Array(nP+1).fill(null));
+      D[0][0] = 0;
+      const dcost = (dur, syl) => { const l = Math.log(Math.max(dur,0.05)/(syl/rate)); return P.w*l*l; };
+      for (let i=0;i<=nL;i++) for (let j=0;j<=nP;j++){
+        const cur = D[i][j]; if (cur >= INF) continue;
+        // skip phrase j (instrumental lead, ad-lib, misdetection)
+        if (j < nP && !(anchorFirst && i === 0)){
+          const c = cur + P.skip + P.skipDur*(phrases[j].e-phrases[j].s);
+          if (c < D[i][j+1]){ D[i][j+1] = c; B[i][j+1] = ['skip']; }
+        }
+        if (i >= nL || j >= nP) continue;
+        // one line over 1..3 consecutive phrases
+        for (let k=1;k<=(P.maxSplit||3) && j+k<=nP;k++){
+          const dur = phrases[j+k-1].e - phrases[j].s;
+          let gap = 0; for (let q=j+1;q<j+k;q++) gap += phrases[q].s - phrases[q-1].e;
+          const c = cur + dcost(dur - P.gapShrink*gap, lines[i].nsyl) + P.split*(k-1) + P.gap*gap;
+          if (c < D[i+1][j+k]){ D[i+1][j+k] = c; B[i+1][j+k] = ['line', k]; }
+        }
+        // 2..3 lines sharing one phrase (no breath between them)
+        for (let m=2;m<=3 && i+m<=nL;m++){
+          let syl = 0; for (let q=i;q<i+m;q++) syl += lines[q].nsyl;
+          const c = cur + dcost(phrases[j].e-phrases[j].s, syl) + P.merge*(m-1);
+          if (c < D[i+m][j+1]){ D[i+m][j+1] = c; B[i+m][j+1] = ['merge', m]; }
+        }
+      }
+      if (D[nL][nP] >= INF) return null;
+      // backtrack
+      const res = new Array(nL); let i = nL, j = nP; let used = 0, usedSyl = 0;
+      while (i > 0 || j > 0){
+        const b = B[i][j];
+        if (!b) break;
+        if (b[0] === 'skip'){ j--; continue; }
+        if (b[0] === 'line'){
+          const k = b[1], s = phrases[j-k].s, e = phrases[j-1].e;
+          res[i-1] = {start:s, end:e}; used += e-s; usedSyl += lines[i-1].nsyl; i--; j -= k; continue;
+        }
+        const m = b[1], ph = phrases[j-1];
+        let syl = 0; for (let q=i-m;q<i;q++) syl += lines[q].nsyl;
+        let acc = 0;
+        for (let q=i-m;q<i;q++){
+          const s = ph.s + (ph.e-ph.s)*acc/syl; acc += lines[q].nsyl;
+          res[q] = {start:s, end: ph.s + (ph.e-ph.s)*acc/syl};
+        }
+        used += ph.e-ph.s; usedSyl += syl; i -= m; j--;
+      }
+      result = res;
+      if (used > 0) rate = usedSyl/used;   // refine singing rate from the matched phrases, then redo
+    }
+    return result;
+  }
+
+  const DEFAULTS = { w:1.0, skip:0.8, skipDur:0.04, split:0.35, merge:1.0, maxSplit:6, gap:0.8, gapShrink:0.5 };
+
+  // Align all lines; pins: {lineIndex: time} (hard anchors from taps or word recognition)
+  function align(lines, phrases, pins={}, params={}){
+    const P = Object.assign({}, DEFAULTS, params);
+    const nL = lines.length;
+    const keys = Object.keys(pins).map(Number).filter(k => k>=0 && k<nL).sort((a,b)=>a-b);
+    // keep anchors monotonic in time
+    const anchors = []; for (const k of keys){ if (!anchors.length || pins[k] > anchors[anchors.length-1][1]) anchors.push([k, pins[k]]); }
+    const bounds = [[0, -Infinity, false]].concat(anchors.map(([k,t]) => [k, t, true]));
+    const out = new Array(nL);
+    for (let b=0;b<bounds.length;b++){
+      const [i0, t0, pinned] = bounds[b];
+      const i1 = b+1 < bounds.length ? bounds[b+1][0] : nL;
+      const t1 = b+1 < bounds.length ? bounds[b+1][1] : Infinity;
+      if (i1 <= i0) continue;
+      let ph = phrases.filter(p => p.e > t0 + 0.05 && p.s < t1 - 0.05).map(p => ({s: Math.max(p.s, t0), e: Math.min(p.e, t1)}));
+      if (pinned){
+        // the pinned line starts exactly at its pin
+        if (!ph.length || ph[0].s > t0 + 0.6) ph.unshift({s: t0, e: Math.min(t1, t0 + Math.max(1, lines[i0].nsyl/3))});
+        else ph[0].s = t0;
+      }
+      const seg = lines.slice(i0, i1);
+      let r = alignSegment(seg, ph, P, pinned);
+      if (!r){   // not enough phrases: spread lines evenly over the available time
+        const a = pinned ? t0 : (phrases[0]?.s ?? 0), z = isFinite(t1) ? t1 : (phrases.length ? phrases[phrases.length-1].e : a + seg.length*3);
+        const tot = seg.reduce((s,l)=>s+l.nsyl,0); let acc = 0;
+        r = seg.map(l => { const s = a + (z-a)*acc/tot; acc += l.nsyl; return {start:s, end:a + (z-a)*acc/tot}; });
+      }
+      for (let q=0;q<seg.length;q++) out[i0+q] = Object.assign(r[q], {pinned: pinned && q===0});
+    }
+    return out;
+  }
+
+  // ---------- Word timings inside a line (syllable-proportional) ----------
+  function wordTimes(line, start, end){
+    const tot = line.nsyl || 1; let acc = 0;
+    return line.syl.map(s => { const t = start + (end-start)*acc/tot; acc += s; return t; });
+  }
+
+  // ---------- Match recognized words (speech-to-text) to the pasted lyrics ----------
+  const normW = w => w.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}']/gu,'').replace(/'/g,'');
+  function editDist(a, b){
+    const m=a.length, n=b.length; if (!m) return n; if (!n) return m;
+    let prev = Array.from({length:n+1},(_,i)=>i);
+    for (let i=1;i<=m;i++){ const cur=[i]; for (let j=1;j<=n;j++) cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1)); prev=cur; }
+    return prev[n];
+  }
+  // lyricWords: [{w, line}], rec: [{w, t}] -> pins {line: time}
+  function pinsFromRecognition(lines, rec){
+    const lw = []; lines.forEach((l,li) => l.words.forEach((w,wi) => { const n = normW(w); if (n) lw.push({w:n, line:li, wi}); }));
+    const rw = rec.map(r => ({w: normW(r.w), t: r.t})).filter(r => r.w);
+    const m = lw.length, n = rw.length; if (!m || !n) return {};
+    const sim = (a,b) => a===b ? 2 : (a.length>=4 && b.length>=4 && editDist(a,b) <= 1 ? 1.2 : -1);
+    // semi-global alignment: unmatched recognized words are free (repeats, ad-libs); skipping lyric words costs a little
+    const GL = -0.3, GR = -0.05;
+    const H = Array.from({length:m+1}, () => new Float64Array(n+1));
+    const Bk = Array.from({length:m+1}, () => new Int8Array(n+1));
+    for (let i=1;i<=m;i++){ H[i][0] = H[i-1][0] + GL; Bk[i][0] = 1; }
+    for (let j=1;j<=n;j++){ H[0][j] = 0; Bk[0][j] = 2; }
+    for (let i=1;i<=m;i++) for (let j=1;j<=n;j++){
+      const d = H[i-1][j-1] + sim(lw[i-1].w, rw[j-1].w), u = H[i-1][j] + GL, l = H[i][j-1] + GR;
+      if (d >= u && d >= l){ H[i][j] = d; Bk[i][j] = 0; } else if (u >= l){ H[i][j] = u; Bk[i][j] = 1; } else { H[i][j] = l; Bk[i][j] = 2; }
+    }
+    const match = new Array(m).fill(null);
+    let i = m, j = n;
+    while (i > 0 && j > 0){
+      const b = Bk[i][j];
+      if (b === 0){ if (sim(lw[i-1].w, rw[j-1].w) > 0) match[i-1] = rw[j-1].t; i--; j--; }
+      else if (b === 1) i--; else j--;
+    }
+    // a line gets a pin when enough of its words were heard
+    const pins = {};
+    lines.forEach((l, li) => {
+      const idx = lw.map((x,k)=>[x,k]).filter(([x]) => x.line === li);
+      const hits = idx.filter(([,k]) => match[k] !== null);
+      if (hits.length >= 2 && hits.length >= idx.length*0.4){
+        // syllable position of each heard word, then fit start time with the singing rate within this line
+        const sylPos = []; let acc = 0; l.syl.forEach(s => { sylPos.push(acc); acc += s; });
+        const pts = hits.map(([x,k]) => [sylPos[x.wi], match[k]]);
+        const [p0, pN] = [pts[0], pts[pts.length-1]];
+        let rate = (pN[0] > p0[0] && pN[1] > p0[1]) ? (pN[1]-p0[1])/(pN[0]-p0[0]) : 0.35;
+        rate = Math.min(Math.max(rate, 0.15), 1.0);           // seconds per syllable, sane range
+        pins[li] = Math.max(0, p0[1] - p0[0]*rate);
+      }
+    });
+    // drop pins that go backwards in time
+    let last = -Infinity; for (const k of Object.keys(pins).map(Number).sort((a,b)=>a-b)){ if (pins[k] <= last + 0.3) delete pins[k]; else last = pins[k]; }
+    return pins;
+  }
+
+  return { parse, lineSyllables, detectPhrases, align, alignSegment, wordTimes, pinsFromRecognition, DEFAULTS };
+})();
+if (typeof module !== 'undefined') module.exports = Lyr;
+</script>
+<script>
 (() => {
+  const IS_APP = true;
   const $ = id => document.getElementById(id);
   const PC_SHARP = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
   const PC_FLAT  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
@@ -245,7 +557,7 @@
 
   let A = null;            // analysis: {T, chroma, bass, energyLow, duration, keyRoot, keyMinor}
   let segs = [];
-  let state = { mode:'simple', transpose:0, capo:0, chg:4, numStyle:'num', keyOv:null };
+  let state = { mode:'simple', transpose:0, capo:0, chg:4, numStyle:'num', keyOv:null, keyPrior:false };
   let curIdx = -1, objUrl = null;
   const PPS = 26; // timeline pixels per second
 
@@ -348,7 +660,7 @@
   $('keySel').onchange = () => {
     const v = $('keySel').value;
     state.keyOv = v==='auto' ? null : { root:+v.split(':')[0], minor: v.split(':')[1]==='1' };
-    renderAll();
+    if (state.keyPrior) recompute(); else renderAll();
   };
   $('numStyle').querySelectorAll('button').forEach(b => b.onclick = () => {
     state.numStyle = b.dataset.s;
@@ -375,6 +687,7 @@
       if (isRec){ sv.href = objUrl; sv.download = file.name; sv.hidden = false; } else { sv.hidden = true; sv.removeAttribute('href'); }
       state.transpose = 0; state.capo = 0; capoSel.value = 0; state.keyOv = null;
       recompute();
+      lyrLoad();
       $('progress').hidden = true; $('results').hidden = false;
       $('tlWrap').scrollLeft = 0;
     } catch (err) {
@@ -551,7 +864,7 @@
     for (let r=0;r<12;r++){ const a=corr(KMAJ,r), b=corr(KMIN,r); if (a>best){best=a;keyRoot=r;keyMinor=false;} if (b>best){best=b;keyRoot=r;keyMinor=true;} }
 
     setProgress(0.97, 'Finishing up…'); await tick();
-    A = { U, chroma:C, bass:B, low, starts, ends, wdur, beatMode, duration, keyRoot, keyMinor, tuning };
+    A = { x, decoded, U, chroma:C, bass:B, low, starts, ends, wdur, beatMode, duration, keyRoot, keyMinor, tuning };
   }
 
   // Beat tracker: spectral-flux onsets, autocorrelation tempo, dynamic-programming beats (Ellis 2007)
@@ -628,6 +941,9 @@
     if (!A) return;
     const chords = buildChords(state.mode), K = chords.length, T = A.U;
     const E = new Float64Array(T*K);
+    // number of chord tones outside the key's scale (for the optional soft key preference)
+    const kI = keyInfo(), scaleSet = new Set((kI.minor ? [0,2,3,5,7,8,10] : [0,2,4,5,7,9,11]).map(x => (kI.root+x)%12));
+    const outOfKey = chords.map(ch => ch.root<0 ? 0 : QUALS[ch.q].iv.filter(iv => !scaleSet.has((ch.root+iv)%12)).length);
     for (let t=0;t<T;t++){
       const c = A.chroma.subarray(t*12, t*12+12), b = A.bass.subarray(t*12, t*12+12), w = A.wdur[t];
       for (let j=0;j<K;j++){
@@ -635,6 +951,7 @@
         if (ch.root<0){ E[t*K+j] = (A.low[t] ? 3 : 0.3)*w; continue; }
         let s=0; for (let p=0;p<12;p++) s += c[p]*ch.tmpl[p];
         s += 0.25*b[ch.root] - ch.pen;
+        if (state.keyPrior) s -= 0.03*Math.min(outOfKey[j], 2)/2;   // soft: never forbids a chord
         E[t*K+j] = (A.low[t] ? s-2 : s)*w;
       }
     }
@@ -772,6 +1089,7 @@
     sh.innerHTML = segs.map((s,i) => `<button type="button" class="cell${s.root<0?' nc':''}" data-i="${i}"><span class="n">${chordName(s)}</span><span class="d">${degree(s)||'&nbsp;'}</span><span class="nt">${chordNotes(s).join(' ')||'&nbsp;'}</span><span class="t">${fmt(s.start)}</span></button>`).join('');
     sh.querySelectorAll('.cell').forEach(el => el.onclick = () => seek(+el.dataset.i));
     $('copyFallback').hidden = true;
+    if (lyr) renderLyrics();
     curIdx = -1; update(true);
   }
 
@@ -792,6 +1110,7 @@
     if (!A || !segs.length) return;
     const t = audio.currentTime || 0;
     const i = findSeg(t);
+    const lyricsActive = lyricsFollow(t);
     const ph = $('ph'); if (ph) ph.style.left = (t*PPS)+'px';
     const nx = segs[i+1];
     $('nxtin').textContent = nx ? 'in '+Math.max(0,nx.start-t).toFixed(1)+'s' : '';
@@ -806,7 +1125,7 @@
       $('curDeg').textContent = degree(segs[i]);
       $('curNotes').textContent = chordNotes(segs[i]).join(' · ');
       renderScale(segs[i]);
-      if (cell && !audio.paused && prevIdx!==i){
+      if (cell && !audio.paused && prevIdx!==i && !lyricsActive){
         const r = cell.getBoundingClientRect();
         if (r.bottom > window.innerHeight || r.top < 0) cell.scrollIntoView({block:'nearest', behavior:'smooth'});
       }
@@ -819,6 +1138,202 @@
   (function loop(){ if (!audio.paused) update(false); requestAnimationFrame(loop); })();
   audio.addEventListener('seeked', () => update(true));
   audio.addEventListener('pause', () => update(true));
+
+  // ---------- Lyrics & chord sheet ----------
+  let lyr = null;          // { text, items, lines, userPins, asrPins, res }
+  let tapMode = null;      // { k }
+  const lyrKey = () => A ? 'cf-lyr:' + $('fname').textContent + ':' + Math.round(A.duration) : null;
+  function lyrSave(){ try { if (lyr) localStorage.setItem(lyrKey(), JSON.stringify({ text:lyr.text, userPins:lyr.userPins, asrPins:lyr.asrPins })); } catch(e){} }
+  function lyrLoad(){
+    lyr = null; tapEnd();
+    let saved = null; try { saved = JSON.parse(localStorage.getItem(lyrKey()) || 'null'); } catch(e){}
+    $('lyrText').value = '';
+    if (saved && saved.text){ $('lyrText').value = saved.text; setLyrics(saved.text, saved.userPins || {}, saved.asrPins || {}); }
+    else showLyrInput();
+  }
+  function showLyrInput(){ $('lyrInput').hidden = false; $('lyrView').hidden = true; $('lyrTools').hidden = true; $('lyrStatus').textContent = ''; }
+  function getPhrases(){ if (!A.phrases) A.phrases = Lyr.detectPhrases(A.x, SR, makeFFT).phrases; return A.phrases; }
+  function setLyrics(text, userPins, asrPins){
+    const items = Lyr.parse(text), lines = items.filter(i => i.type === 'line');
+    if (!lines.length){ $('lyrStatus').textContent = 'No lyric lines found. Paste the words, one line per row.'; return; }
+    lyr = { text, items, lines, userPins: userPins || {}, asrPins: asrPins || {}, res: null };
+    $('lyrInput').hidden = true; $('lyrView').hidden = false; $('lyrTools').hidden = false;
+    $('lyrAsr').hidden = !IS_APP;
+    realign(); lyrSave();
+  }
+  function realign(){
+    if (!lyr || !A) return;
+    const pins = Object.assign({}, lyr.asrPins, lyr.userPins);
+    lyr.res = Lyr.align(lyr.lines, getPhrases(), pins);
+    renderLyrics();
+  }
+  $('lyrGo').onclick = () => {
+    const text = $('lyrText').value.trim();
+    if (!text){ $('lyrStatus').textContent = 'Paste the lyrics first.'; return; }
+    const same = lyr && lyr.text === text;
+    setLyrics(text, same ? lyr.userPins : {}, same ? lyr.asrPins : {});
+  };
+  $('lyrEdit').onclick = () => { tapEnd(); $('lyrText').value = lyr ? lyr.text : ''; showLyrInput(); };
+  $('lyrCopy').onclick = () => copyText(lyricsSheetText());
+  $('lyrReset').onclick = () => { if (!lyr) return; lyr.userPins = {}; realign(); lyrSave(); showToast('Back to automatic line-up'); };
+
+  // chords for display
+  const chordsFrom = (t0, t1) => segs.filter(s => s.root >= 0 && s.start >= t0 && s.start < t1).map(s => ({ t: s.start, n: chordName(s) }));
+  const chordAt = t => { const s = segs[findSeg(t)]; return s && s.root >= 0 ? chordName(s) : null; };
+  function compressRun(names){
+    const L = names.length;
+    for (let p=1; p<=L/2; p++){
+      if (L % p) continue;
+      let ok = true; for (let i=p;i<L;i++) if (names[i] !== names[i%p]){ ok = false; break; }
+      if (ok) return names.slice(0,p).join('  ') + `   (×${L/p})`;
+    }
+    return names.join('  ');
+  }
+  // Build a structured sheet: blocks of {kind:'header'|'blank'|'chords'|'line', ...}
+  function buildSheet(){
+    const res = lyr.res, n = lyr.lines.length, out = [];
+    const spanEnd = i => Math.min(i+1 < n ? res[i+1].start : A.duration, res[i].end + 2.5) - 0.25;
+    const intro = chordsFrom(0, res[0].start - 0.25);
+    if (intro.length) out.push({ kind:'chords', label:'Intro', names: intro.map(c => c.n) });
+    let li = 0;
+    for (const it of lyr.items){
+      if (it.type === 'header'){ out.push({ kind:'header', text: it.text }); continue; }
+      if (it.type === 'blank'){ out.push({ kind:'blank' }); continue; }
+      const i = li++, s = res[i].start, e = res[i].end;
+      const wt = Lyr.wordTimes(it, s, e);
+      const place = new Array(it.words.length + 1).fill(null).map(() => []);
+      const first = chordAt(s + 0.05); if (first) place[0].push(first);
+      for (const c of chordsFrom(s + 0.05, spanEnd(i))){
+        let wi = 0; for (let k=0;k<wt.length;k++) if (wt[k] <= c.t + 0.05) wi = k;
+        if (c.t > e) wi = it.words.length;          // changes during the breath after the line
+        if (place[wi][place[wi].length-1] !== c.n) place[wi].push(c.n);
+      }
+      out.push({ kind:'line', li: i, words: it.words, place, pinned: i in lyr.userPins, start: s });
+      const gapEnd = i+1 < n ? res[i+1].start - 0.25 : A.duration + 1;
+      const inst = chordsFrom(spanEnd(i), gapEnd);
+      if (inst.length) out.push({ kind:'chords', label: i+1 < n ? (gapEnd - spanEnd(i) > 3 ? 'Instrumental' : '') : 'Outro', names: inst.map(c => c.n) });
+    }
+    return out;
+  }
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  function renderLyrics(){
+    if (!lyr || !lyr.res || !A) return;
+    const html = buildSheet().map(b => {
+      if (b.kind === 'header') return `<div class="lh">[${esc(b.text)}]</div>`;
+      if (b.kind === 'blank') return `<div class="lb"></div>`;
+      if (b.kind === 'chords') return `<div class="lc">${b.label ? `<span class="lbl">${b.label}</span>` : ''}<b>${esc(compressRun(b.names))}</b></div>`;
+      const words = b.words.map((w, k) => `<span class="w"><b class="c">${b.place[k].join(' ') || '&nbsp;'}</b><span class="t">${esc(w)}</span></span>`).join('');
+      const tail = b.place[b.words.length].length ? `<span class="w"><b class="c">${b.place[b.words.length].join(' ')}</b><span class="t">&nbsp;</span></span>` : '';
+      return `<div class="ll${b.pinned ? ' pinned' : ''}" data-li="${b.li}"><span class="lt">${fmt(b.start)}${b.pinned ? ' <button class="unpin" type="button" data-li="' + b.li + '" title="Undo">📌×</button>' : ''}</span><div class="lw">${words}${tail}</div></div>`;
+    }).join('');
+    $('lyrSheet').innerHTML = html;
+    $('lyrSheet').querySelectorAll('.ll').forEach(el => el.onclick = (ev) => {
+      const li = +el.dataset.li;
+      if (ev.target.classList.contains('unpin')){ delete lyr.userPins[li]; realign(); lyrSave(); return; }
+      if (tapMode) return;
+      if (!audio.paused){
+        lyr.userPins[li] = Math.max(0, audio.currentTime - 0.15);
+        realign(); lyrSave(); showToast('Line set to start at ' + fmt(lyr.userPins[li]));
+      } else {
+        audio.currentTime = lyr.res[li].start; update(true);
+      }
+    });
+    lyrCur = -1;
+  }
+  let lyrCur = -1;
+  function lyricsFollow(t){
+    if (!lyr || !lyr.res || $('lyrView').hidden) return false;
+    const res = lyr.res; let li = -1;
+    for (let i=0;i<res.length;i++){ if (res[i].start - 0.1 <= t) li = i; else break; }
+    if (li >= 0 && t > res[li].end + 3) li = -1;
+    if (li !== lyrCur){
+      lyrCur = li;
+      $('lyrSheet').querySelectorAll('.ll.on').forEach(e => e.classList.remove('on'));
+      const el = li >= 0 ? $('lyrSheet').querySelector(`.ll[data-li="${li}"]`) : null;
+      if (el){ el.classList.add('on');
+        if (!audio.paused){ const r = el.getBoundingClientRect(); if (r.top < 60 || r.bottom > window.innerHeight - 140) el.scrollIntoView({ block:'center', behavior:'smooth' }); } }
+    }
+    if (tapMode) $('tapNext').textContent = tapMode.k < lyr.lines.length ? lyr.lines[tapMode.k].text : 'All lines set';
+    return li >= 0;
+  }
+  // plain-text chord sheet (Ultimate Guitar style: chords above the words)
+  function lyricsSheetText(){
+    const lines = [$('fname').textContent, 'Key: ' + $('key').textContent + (state.capo ? '   Capo ' + state.capo : ''), ''];
+    for (const b of buildSheet()){
+      if (b.kind === 'header'){ lines.push('[' + b.text + ']'); continue; }
+      if (b.kind === 'blank'){ lines.push(''); continue; }
+      if (b.kind === 'chords'){ if (b.label) lines.push('[' + b.label + ']'); lines.push(compressRun(b.names)); continue; }
+      let lyric = '', chord = '';
+      const put = (pos, s) => { if (chord.length && pos < chord.length + 1) pos = chord.length + 1; chord = chord.padEnd(pos, ' ') + s; };
+      b.words.forEach((w, k) => {
+        const pos = lyric.length + (k ? 1 : 0);
+        if (b.place[k].length) put(pos, b.place[k].join(' '));
+        lyric += (k ? ' ' : '') + w;
+      });
+      if (b.place[b.words.length].length) put(lyric.length + 2, b.place[b.words.length].join(' '));
+      if (chord.trim()) lines.push(chord.replace(/\s+$/,''));
+      lines.push(lyric);
+    }
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n');
+  }
+
+  // Tap-along: play from the start and tap as each line begins
+  $('lyrTap').onclick = () => {
+    if (!lyr) return;
+    lyr.userPins = {}; tapMode = { k: 0 };
+    $('tapBar').hidden = false; document.body.classList.add('tapping');
+    audio.currentTime = 0; const p = audio.play(); if (p && p.catch) p.catch(()=>{});
+    lyricsFollow(0);
+  };
+  $('tapBtn').onclick = tapOnce;
+  $('tapStop').onclick = () => { tapEnd(); realign(); lyrSave(); };
+  document.addEventListener('keydown', e => { if (tapMode && e.code === 'Space'){ e.preventDefault(); tapOnce(); } });
+  function tapOnce(){
+    if (!tapMode || !lyr) return;
+    if (tapMode.k < lyr.lines.length){ lyr.userPins[tapMode.k] = Math.max(0, audio.currentTime - 0.15); tapMode.k++; realign(); lyrSave(); }
+    if (tapMode.k >= lyr.lines.length){ tapEnd(); showToast('All lines set'); }
+  }
+  function tapEnd(){ tapMode = null; $('tapBar').hidden = true; document.body.classList.remove('tapping'); }
+
+  // Optional: hear the words (English) with a speech model, then pin the lines it recognizes
+  $('lyrAsr').onclick = async () => {
+    if (!lyr || !A) return;
+    const st = $('lyrStatus'), btn = $('lyrAsr');
+    btn.disabled = true;
+    try {
+      st.textContent = 'Loading the speech model… (first time only, about 80 MB)';
+      const T = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js');
+      const files = {};
+      const asr = await T.pipeline('automatic-speech-recognition', 'Xenova/whisper-base.en', {
+        progress_callback: p => {
+          if (p.status === 'progress' && p.file){ files[p.file] = [p.loaded||0, p.total||0];
+            let a=0,b=0; for (const v of Object.values(files)){ a+=v[0]; b+=v[1]; }
+            if (b) st.textContent = `Downloading the speech model… ${Math.round(100*a/b)}% (first time only)`; }
+        }
+      });
+      st.textContent = 'Listening for the words… this can take a minute or two.';
+      const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const off = new OAC(1, Math.ceil(A.duration*16000), 16000);
+      const src = off.createBufferSource(); src.buffer = A.decoded; src.connect(off.destination); src.start();
+      const audio16 = (await off.startRendering()).getChannelData(0);
+      const out = await asr(audio16, { return_timestamps: 'word', chunk_length_s: 30, stride_length_s: 5 });
+      const rec = (out.chunks || []).filter(c => c.timestamp && c.timestamp[0] != null).map(c => ({ w: c.text.trim(), t: c.timestamp[0] }));
+      lyr.asrPins = Lyr.pinsFromRecognition(lyr.lines, rec);
+      realign(); lyrSave();
+      const k = Object.keys(lyr.asrPins).length;
+      st.textContent = k ? `Matched ${k} of ${lyr.lines.length} lines from the words it heard. The rest are fitted around them.`
+                         : "Couldn't match the words to your lyrics. This works best for English songs with clear vocals.";
+    } catch (e) {
+      console.error(e);
+      st.textContent = 'Word matching failed (' + (e && e.message ? e.message : 'error') + '). Check your internet connection for the first download.';
+    } finally { btn.disabled = false; }
+  };
+
+  function showToast(msg){ const t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1600); }
+  function copyText(txt){
+    const fallback = () => { const ta=$('copyFallback'); ta.value=txt; ta.hidden=false; ta.focus(); ta.select(); };
+    try { navigator.clipboard.writeText(txt).then(() => showToast('Copied'), fallback); } catch(e){ fallback(); }
+  }
 
   // ---------- Copy ----------
   function sheetText(){
